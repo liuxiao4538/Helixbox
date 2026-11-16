@@ -65,21 +65,25 @@ jobs:
       - name: Build router packages (ipk + apk, multi-arch)
         run: python3 openwrt/helixbox/build_packages.py
 
-      - name: Collect router packages (flatten with unique names)
+      - name: Collect router packages (unified names)
         run: |
-          # 扁平化到单层目录，文件名带架构前缀，避免同名覆盖
+          # 文件名已由 build_packages.py 统一为 luci-app-helixbox-1.0.0-<arch>.ipk/.apk，
+          # 且各架构名不同，直接复制不会重名，无需加前缀
           for f in openwrt/helixbox/dist/ipk/*/*.ipk; do
-            [ -f "$f" ] || continue
-            arch=$(basename "$(dirname "$f")")
-            cp "$f" "release-assets/ipk-${arch}-$(basename "$f")"
+            [ -f "$f" ] && cp "$f" release-assets/
           done
           for f in openwrt/helixbox/dist/apk/*/*.apk; do
-            [ -f "$f" ] || continue
-            arch=$(basename "$(dirname "$f")")
-            cp "$f" "release-assets/apk-${arch}-$(basename "$f")"
+            [ -f "$f" ] && cp "$f" release-assets/
           done
           echo "=== release-assets 内容 ==="
           ls -lh release-assets/
+
+      - name: Delete old release (remove duplicate assets)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 只删 Release，保留 tag；这样重建后附件干净不重复
+          gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || echo "无旧 Release，跳过"
 
       - name: Create Release with assets
         uses: softprops/action-gh-release@v2
@@ -89,18 +93,21 @@ jobs:
             ## Helixbox ${{ github.ref_name }}
             XboxDownload 原理 + v3 并发测速的软路由加速插件与 Android 遥控器。
 
-            ### 手机 App（两个版本，任选其一安装）
-            - `Helixbox-v*-android-release.apk` —— release 版（推荐，体积更小）
-            - `Helixbox-v*-android-debug.apk` —— debug 版（便于排查问题）
-            - 均为通用 APK，支持 arm64-v8a / armeabi-v7a 安卓手机
+            ### 手机 App（可选，遥控器）
+            - `Helixbox-${{ github.ref_name }}-android-release.apk` —— 手机安装包（推荐）
 
-            ### 软路由插件（纯脚本，架构通用；按目录区分固件版本）
-            - `ipk/<架构>/` —— OpenWrt **24.10 及更早**（opkg），文件名 `luci-app-helixbox_1.0.0_<arch>.ipk`
-            - `apk/<架构>/` —— OpenWrt **25.12 及更新**（apk-tools），文件名 `luci-app-helixbox-1.0.0-r1.apk`
-            - `noarch/` 与 `all/` —— 通用包（脚本插件一份通吃）
+            ### 软路由插件（统一命名：luci-app-helixbox-1.0.0-<架构>.<格式>）
+            **按固件版本选后缀**：
+            - `.apk` —— OpenWrt **25.12 及更新**（apk-tools）
+            - `.ipk` —— OpenWrt **24.10 及更早**（opkg）
 
-            架构目录：`x86_64`、`aarch64_cortex-a53`、`aarch64_cortex-a72`、`arm_cortex-a7_neon-vfpv4`。
-            不确定架构就在路由器执行 `uname -m` 查看。
+            **按架构选名字**（插件是纯脚本，架构通用；`all`/`noarch` 是通用包）：
+            - `x86_64`（x86 软路由）
+            - `aarch64_cortex-a53` / `aarch64_cortex-a72`（ARM64 软路由）
+            - `arm_cortex-a7_neon-vfpv4`（ARMv7）
+            - `all`（ipk 通用）/ `noarch`（apk 通用）
+
+            例如：`luci-app-helixbox-1.0.0-x86_64.apk`。不确定架构就在路由器执行 `uname -m`。
 
             ### 安装
             手机：下载 APK 直接安装，连家里 WiFi 后添加路由器（地址填 `路由器IP:8080`）。

@@ -8,8 +8,8 @@
 
 运行 `python3 build_packages.py` 生成到 `dist/`：
 
-- `dist/ipk/<架构>/luci-app-helixbox_1.0.0_<架构>.ipk` —— **OpenWrt 24.10 及更早**（opkg）
-- `dist/apk/<架构>/luci-app-helixbox-1.0.0-r1.apk` —— **OpenWrt 25.12 及更新**（apk-tools，注意 `.PKGINFO` 里是 `arch = noarch`）
+- `dist/ipk/<架构>/luci-app-helixbox-1.0.0-<架构>.ipk` —— **OpenWrt 24.10 及更早**（opkg）
+- `dist/apk/<架构>/luci-app-helixbox-1.0.0-<架构>.apk` —— **OpenWrt 25.12 及更新**（apk-tools，注意 `.PKGINFO` 里是 `arch = noarch`）
 - 架构目录：`x86_64`、`aarch64_cortex-a53`、`aarch64_cortex-a72`、`arm_cortex-a7_neon-vfpv4`，另有 `all`（ipk）/ `noarch`（apk）通用包。
 - 插件是纯脚本，架构通用；分目录只是方便按机型取用。不确定架构在路由器执行 `uname -m`。
 - 也可把 `helixbox/` 放进 OpenWrt 源码 `package/` 用 `make menuconfig` 编译。
@@ -43,12 +43,12 @@
 
 ```sh
 # OpenWrt 24.10 及更早：opkg + ipk
-scp dist/ipk/x86_64/luci-app-helixbox_1.0.0_x86_64.ipk root@192.168.1.1:/tmp/
-ssh root@192.168.1.1 'opkg update && opkg install /tmp/luci-app-helixbox_1.0.0_x86_64.ipk'
+scp dist/ipk/x86_64/luci-app-helixbox-1.0.0-x86_64.ipk root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 'opkg update && opkg install /tmp/luci-app-helixbox-1.0.0-x86_64.ipk'
 
 # OpenWrt 25.12 及更新：apk-tools + apk
-scp dist/apk/x86_64/luci-app-helixbox-1.0.0-r1.apk root@192.168.1.1:/tmp/
-ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-helixbox-1.0.0-r1.apk'
+scp dist/apk/x86_64/luci-app-helixbox-1.0.0-<架构>.apk root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-helixbox-1.0.0-<架构>.apk'
 
 ssh root@192.168.1.1 '/etc/init.d/uhttpd restart'
 # 清浏览器缓存后重新登录管理页

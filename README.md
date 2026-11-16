@@ -11,8 +11,8 @@
 
 | 固件 | 包管理器 | 安装包 |
 |---|---|---|
-| OpenWrt **24.10 及更早** | opkg | `dist/ipk/<架构>/luci-app-helixbox_1.0.0_<架构>.ipk` |
-| OpenWrt **25.12 及更新** | apk-tools | `dist/apk/<架构>/luci-app-helixbox-1.0.0-r1.apk` |
+| OpenWrt **24.10 及更早** | opkg | `dist/ipk/<架构>/luci-app-helixbox-1.0.0-<架构>.ipk` |
+| OpenWrt **25.12 及更新** | apk-tools | `dist/apk/<架构>/luci-app-helixbox-1.0.0-<架构>.apk` |
 
 架构目录：`x86_64`、`aarch64_cortex-a53`、`aarch64_cortex-a72`、`arm_cortex-a7_neon-vfpv4`，另有 `all`（opkg 通用）/ `noarch`（apk 通用）。插件是纯脚本，一份通用包即可跨架构安装；分架构目录是为方便你按机型取用。不确定架构就在路由器执行 `uname -m`。
 

@@ -121,9 +121,10 @@ def write_ar(path, members):
 
 
 def build_ipk(arch, data_entries):
+    """OpenWrt 24.10 及更早（opkg）。统一命名：luci-app-helixbox-1.0.0-<arch>.ipk"""
     out_dir = os.path.join(DIST, "ipk", arch)
     os.makedirs(out_dir, exist_ok=True)
-    out = os.path.join(out_dir, f"luci-app-helixbox_{VERSION}_{arch}.ipk")
+    out = os.path.join(out_dir, f"luci-app-helixbox-{VERSION}-{arch}.ipk")
     control = make_tar_gz([("control", control_text(arch).encode("utf-8"), 0o644)])
     data = make_tar_gz(data_entries)
     write_ar(out, [("debian-binary", b"2.0\n"), ("control.tar.gz", control), ("data.tar.gz", data)])
@@ -131,9 +132,11 @@ def build_ipk(arch, data_entries):
 
 
 def build_apk(arch, data_entries):
+    """OpenWrt 25.12 及更新（apk-tools）。统一命名：luci-app-helixbox-1.0.0-<arch>.apk
+    注意：内部 .PKGINFO 的 pkgver 仍带 -r1 修订号，但文件名对用户简化为一个格式。"""
     out_dir = os.path.join(DIST, "apk", arch)
     os.makedirs(out_dir, exist_ok=True)
-    out = os.path.join(out_dir, f"luci-app-helixbox-{VERSION}-{PKG_REV}.apk")
+    out = os.path.join(out_dir, f"luci-app-helixbox-{VERSION}-{arch}.apk")
     control = make_tar_gz([(".PKGINFO", pkginfo_text().encode("utf-8"), 0o644)])
     data = make_tar_gz(data_entries)
     with open(out, "wb") as f:
