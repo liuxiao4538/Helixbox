@@ -16,7 +16,7 @@
 
 架构目录：`x86_64`、`aarch64_cortex-a53`、`aarch64_cortex-a72`、`arm_cortex-a7_neon-vfpv4`，另有 `all`（opkg 通用）/ `noarch`（apk 通用）。插件是纯脚本，一份通用包即可跨架构安装；分架构目录是为方便你按机型取用。不确定架构就在路由器执行 `uname -m`。
 
-**手机 APK 由 GitHub Actions 云端编译**：推送 `v*` 标签后，Release 里会自动出现 `Helixbox-v*-android-release.apk` 和 `-debug.apk`。本机无 Flutter/JDK，源码已就绪。
+**手机 APK**：可直接下载 `android-apk/Helixbox-v1.0.0-android-release.apk` 安装（22MB，已签名）。同时 GitHub Actions 会在推送 `v*` 标签后云端编译并发布到 Releases。本机已用 Flutter 3.24.5 + JDK 17 + Android SDK 34 编译验证通过。
 
 ## 测速到底在手机还是路由器？（重要）
 
