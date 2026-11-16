@@ -4,7 +4,9 @@ set -e
 cd "$(dirname "$0")"
 
 echo "==> 测试 SSH 连接"
-if ! ssh -T git@github.com 2>&1 | grep -qi "successfully authenticated"; then
+AUTH=$(ssh -T git@github.com 2>&1 || true)
+echo "$AUTH" | head -1
+if ! echo "$AUTH" | grep -qi "successfully authenticated"; then
   echo "❌ SSH 未授权。请先把公钥加到 https://github.com/settings/keys："
   echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIFrJqgUWEI1b0FMPGx6P5i5O6hVsKdwCN1fSiqUEZjW helixbox-push"
   exit 1
