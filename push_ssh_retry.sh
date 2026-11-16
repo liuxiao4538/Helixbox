@@ -12,7 +12,7 @@ retry_push() {
   local desc="$1"; shift
   local out rc
   for i in $(seq 1 20); do
-    out=$(timeout 60 git push "$@" 2>&1); rc=$?
+    out=$(GIT_SSH_COMMAND="ssh -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=2" timeout 25 git push "$@" 2>&1); rc=$?
     if [ $rc -eq 0 ]; then
       echo "$out" | tail -3
       return 0
