@@ -22,3 +22,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/helix_mark.png
+    - assets/helixbox_logo.png

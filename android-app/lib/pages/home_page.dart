@@ -92,15 +92,14 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Row(children: [
                     Container(
-                      width: 44, height: 44,
+                      width: 46, height: 46,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.18),
+                        color: const Color(0xFF0F141A),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.white30),
                       ),
-                      child: const Center(
-                        child: Text('H', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.black87)),
-                      ),
+                      padding: const EdgeInsets.all(5),
+                      child: Image.asset('assets/helix_mark.png', fit: BoxFit.contain),
                     ),
                     const SizedBox(width: 12),
                     const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

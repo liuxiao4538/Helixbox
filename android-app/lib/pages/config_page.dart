@@ -1,7 +1,6 @@
 /// 配置生成页：输入路由器 IP → 生成 OpenWrt / hosts / Nginx 三种配置 → 复制/分享
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../core/theme.dart';
 import '../services/config_generator.dart';
 import '../services/storage_service.dart';
 

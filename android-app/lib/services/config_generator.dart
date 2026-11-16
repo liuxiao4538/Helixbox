@@ -39,8 +39,8 @@ class ConfigGenerator {
     for (final entry in selected.entries) {
       final domains = _domainsForGroup(entry.key);
       if (domains.isEmpty) continue;
-      b.writeln('# ${AppConstants.ipGroupLabels[entry.key] ?? entry.key}')
-        ..writeln('${entry.value} ${domains.join(' ')}');
+      b.writeln('# ${AppConstants.ipGroupLabels[entry.key] ?? entry.key}');
+      b.writeln('${entry.value} ${domains.join(' ')}');
     }
     return b.toString();
   }

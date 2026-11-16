@@ -1,7 +1,6 @@
 /// 测速页：默认让软路由跑 v3 抢跑测速（最准），手机只显示结果 + 下发
 /// 无路由器时可切“本机测速”降级（走 WiFi 多一跳，仅供参考）
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/ip_node.dart';
 import '../models/router_device.dart';

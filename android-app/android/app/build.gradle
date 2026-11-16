@@ -1,11 +1,11 @@
-// App 模块 Gradle 配置（Flutter 3.x 标准）
 plugins {
-    id 'com.android.application'
-    id 'kotlin-android'
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 android {
-    namespace 'com.example.xboxdownload_controller'
+    namespace "com.example.xboxdownload_controller"
     compileSdk 34
 
     defaultConfig {
@@ -18,8 +18,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug // V1 用 debug 签名，正式上架再配 keystore
-            minifyEnabled false
+            // V1 用 debug 签名，保证可直接安装到手机
+            signingConfig signingConfigs.debug
         }
     }
     compileOptions {
@@ -27,7 +27,7 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = "17"
     }
 }
 
