@@ -50,13 +50,13 @@ jobs:
         run: |
           mkdir -p release-assets
           cp android-app/build/app/outputs/flutter-apk/app-release.apk \
-             release-assets/Helixbox-v${GITHUB_REF_NAME}-android-release.apk
-          # debug APK 约 100MB，接近 GitHub 单文件上限，云端不挂它（本地已产出）
+             release-assets/Helixbox-${GITHUB_REF_NAME}-android-release.apk
+          # debug APK 约 88MB，若接近 GitHub 单文件上限则跳过（本地已产出）
           if [ -f android-app/build/app/outputs/flutter-apk/app-debug.apk ]; then
             sz=$(stat -c%s android-app/build/app/outputs/flutter-apk/app-debug.apk)
             if [ "$sz" -lt 95000000 ]; then
               cp android-app/build/app/outputs/flutter-apk/app-debug.apk \
-                 release-assets/Helixbox-v${GITHUB_REF_NAME}-android-debug.apk
+                 release-assets/Helixbox-${GITHUB_REF_NAME}-android-debug.apk
             else
               echo "debug APK ${sz} bytes 过大，跳过上传"
             fi
