@@ -1,0 +1,182 @@
+<%
+-- Helixbox 图形化状态页（美化版）：品牌头图 + 数据卡片 + 测速榜 + 运营商筛选
+%>
+<%+header%>
+
+<style>
+.hx-wrap{--hx:#00d1b2;--hx2:#00a88f;--bg:#0f141a;--card:#181f28;--card2:#1e2732;--line:#2a3542;--txt:#e8eef5;--mut:#8d9bad;--ok:#00d1b2;--bad:#ff5d6c;--warn:#ffb020;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--txt)}
+.hx-wrap *{box-sizing:border-box}
+.hx-hero{position:relative;overflow:hidden;border-radius:16px;padding:22px 24px;background:linear-gradient(120deg,#0d3b34 0%,#12564a 55%,#0b2c2a 100%);border:1px solid #1c6b5c;margin:8px 0 16px}
+.hx-hero:after{content:"";position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(0,209,178,.25),transparent 70%)}
+.hx-brand{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
+.hx-logo{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--hx),#6ee7d5);display:flex;align-items:center;justify-content:center;color:#06332c;font-weight:800;font-size:20px;box-shadow:0 4px 14px rgba(0,209,178,.35)}
+.hx-brand h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
+.hx-brand p{margin:2px 0 0;font-size:12px;color:#a9d9d0}
+.hx-pill{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-top:14px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12)}
+.hx-dot{width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 3px rgba(255,93,108,.18)}
+.hx-dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(0,209,178,.2);animation:hxpulse 2s infinite}
+@keyframes hxpulse{50%{box-shadow:0 0 0 6px rgba(0,209,178,0)}}
+.hx-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.hx-stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.hx-stat .k{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+.hx-stat .v{font-size:17px;font-weight:700;margin-top:6px;word-break:break-all}
+.hx-stat .v small{font-size:11px;color:var(--mut);font-weight:400}
+.hx-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.hx-card h2{font-size:14px;margin:0 0 14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.hx-card h2:before{content:"";width:3px;height:15px;background:var(--hx);border-radius:2px}
+.hx-btns{display:flex;gap:9px;flex-wrap:wrap}
+.hx-btn{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:10px;padding:9px 15px;font-size:13px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.hx-btn:hover{transform:translateY(-1px);border-color:var(--hx)}
+.hx-btn:disabled{opacity:.5;cursor:wait;transform:none}
+.hx-btn.primary{background:linear-gradient(135deg,var(--hx),var(--hx2));color:#04251f;border-color:transparent;font-weight:700}
+.hx-btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.hx-log{margin-top:14px;padding:10px 13px;background:#0c1117;border:1px solid var(--line);border-radius:9px;font-size:12px;color:var(--mut);line-height:1.6;min-height:40px}
+.hx-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.hx-select{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px}
+.hx-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.hx-tbl th{color:var(--mut);font-weight:500;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.hx-tbl td{padding:10px;border-bottom:1px solid rgba(42,53,66,.5);vertical-align:middle}
+.hx-tbl tr:hover td{background:rgba(0,209,178,.04)}
+.hx-tbl .win td{background:rgba(0,209,178,.08)}
+.hx-ip{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.hx-rank{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:6px;background:var(--card2);font-size:11px;font-weight:700;color:var(--mut)}
+.hx-rank.r1{background:linear-gradient(135deg,#ffd76e,#ffb020);color:#4a3200}
+.hx-rank.r2{background:linear-gradient(135deg,#dbe4ee,#9fb0c4);color:#22303d}
+.hx-rank.r3{background:linear-gradient(135deg,#e0a878,#b9743c);color:#3d1f08}
+.hx-tag{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--card2);font-size:11px;color:var(--mut)}
+.hx-tag.win{background:rgba(0,209,178,.16);color:var(--hx);font-weight:600}
+.hx-isp{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;border:1px solid var(--line)}
+.hx-bar{height:7px;background:var(--card2);border-radius:4px;overflow:hidden;width:100%;min-width:90px}
+.hx-bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--hx2),var(--hx));transition:width .5s}
+.hx-mini{color:var(--mut);font-size:11px}
+.hx-steps{font-size:12px;line-height:2;color:var(--mut)}
+.hx-steps b{color:var(--hx)}
+.hx-empty{text-align:center;color:var(--mut);padding:28px;font-size:13px}
+@media(max-width:760px){.hx-stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<script type="text/javascript">
+var API = '<%=luci.dispatcher.build_url("admin/services/helixbox/api")%>';
+var ALL = [];
+
+function call(action, extra, cb, btn){
+  if(btn) btn.disabled=true;
+  fetch(API + '?action=' + action + (extra||''), {credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(j){ if(cb) cb(j); if(btn) btn.disabled=false; })
+    .catch(function(e){ log('请求失败：'+e); if(btn) btn.disabled=false; });
+}
+function log(t){ document.getElementById('hx-log').textContent=t; }
+
+function loadStatus(){
+  call('status','',function(j){
+    var on = j.enabled==1 && j.running==1;
+    var dot=document.getElementById('hx-dot'), pill=document.getElementById('hx-pill-text');
+    dot.className = 'hx-dot'+(on?' on':'');
+    pill.textContent = on ? '加速运行中' : '加速已关闭';
+    document.getElementById('hx-stat-state').innerHTML = on
+      ? '<span style="color:var(--ok)">运行中</span>' : '<span style="color:var(--bad)">已关闭</span>';
+    document.getElementById('hx-stat-ip').innerHTML = j.primary_ip
+      ? '<span class="hx-ip">'+j.primary_ip+'</span>' : '<small>未设置</small>';
+    document.getElementById('hx-stat-isp').textContent = j.primary_isp || '—';
+    document.getElementById('hx-meta').textContent =
+      '路由器 '+j.router_ip+' · 管理页 :'+j.uhttpd_port+' · 管理页地址 http://'+j.router_ip+':'+j.uhttpd_port;
+  });
+}
+
+function runTest(btn){
+  log('正在并发测速：ping 预筛 → 10MB 分片抢跑，约 10 秒，请稍候…');
+  document.getElementById('hx-body').innerHTML='<tr><td colspan="7" class="hx-empty">测速进行中…</td></tr>';
+  document.getElementById('hx-stat-count').textContent='…';
+  call('speedtest','',function(j){
+    if(!j.ok){ log('测速失败：'+(j.msg||'未知')); return; }
+    ALL = j.results || [];
+    document.getElementById('hx-stat-count').textContent=ALL.length;
+    log('测速完成 · 赢家 '+j.winner+' · '+ALL.length+' 个 IP 响应 · 点“选用”下发到路由器');
+    render();
+  }, btn);
+}
+
+function render(){
+  var f=document.getElementById('hx-isp').value;
+  var rows=ALL.filter(function(x){return !f||x.isp===f;});
+  rows.sort(function(a,b){return (b.bytes||0)-(a.bytes||0)||(a.ms||9999)-(b.ms||9999);});
+  var maxB=1; rows.forEach(function(x){if(x.bytes>maxB)maxB=x.bytes;});
+  var h='';
+  rows.forEach(function(x,i){
+    var rank=i<3?'r'+(i+1):'';
+    var tag=x.win?'<span class="hx-tag win">最快</span>':'';
+    var pct=Math.round(x.bytes/maxB*100);
+    h+='<tr class="'+(x.win?'win':'')+'">'+
+      '<td><span class="hx-rank '+rank+'">'+(i+1)+'</span></td>'+
+      '<td><span class="hx-ip">'+x.ip+'</span> '+tag+'</td>'+
+      '<td>'+x.loc+'</td>'+
+      '<td><span class="hx-isp">'+x.isp+'</span></td>'+
+      '<td>'+x.ms+' ms</td>'+
+      '<td><div style="display:flex;align-items:center;gap:8px"><div class="hx-bar"><i style="width:'+pct+'%"></i></div><span class="hx-mini" style="min-width:52px">'+(x.bytes/1048576).toFixed(1)+'M</span></div></td>'+
+      '<td><button class="hx-btn" style="padding:5px 10px;font-size:11px" onclick="pick(\''+x.ip+'\',\''+x.isp+'\',this)">选用</button></td></tr>';
+  });
+  document.getElementById('hx-body').innerHTML=h||'<tr><td colspan="7" class="hx-empty">该运营商无结果</td></tr>';
+  var opts={};ALL.forEach(function(x){if(x.isp)opts[x.isp]=1;});
+  var sel=document.getElementById('hx-isp'),cur=sel.value;
+  sel.innerHTML='<option value="">全部运营商</option>'+Object.keys(opts).map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('');
+  sel.value=cur;
+}
+function pick(ip,isp,btn){
+  call('apply_ip','&group=primary&ip='+encodeURIComponent(ip)+'&isp='+encodeURIComponent(isp),function(j){
+    log(j.ok?('已下发 '+ip+'（'+isp+'）到主下载组，正在生效…'):('下发失败：'+j.msg));
+    loadStatus();
+  },btn);
+}
+window.onload=loadStatus;
+</script>
+
+<div class="hx-wrap">
+  <div class="hx-hero">
+    <div class="hx-brand">
+      <div class="hx-logo">H</div>
+      <div><h1>Helixbox 下载加速</h1><p>Xbox · 微软商店 · PlayStation · Nintendo 全平台加速</p></div>
+    </div>
+    <div class="hx-pill"><span class="hx-dot" id="hx-dot"></span><span id="hx-pill-text">读取状态中…</span></div>
+  </div>
+
+  <div class="hx-stats">
+    <div class="hx-stat"><div class="k">加速状态</div><div class="v" id="hx-stat-state">—</div></div>
+    <div class="hx-stat"><div class="k">当前主 IP</div><div class="v" id="hx-stat-ip">—</div></div>
+    <div class="hx-stat"><div class="k">运营商</div><div class="v" id="hx-stat-isp">—</div></div>
+    <div class="hx-stat"><div class="k">测速响应数</div><div class="v" id="hx-stat-count">—</div></div>
+  </div>
+
+  <div class="hx-card">
+    <h2>控制台</h2>
+    <div class="hx-btns">
+      <button class="hx-btn primary" onclick="runTest(this)">⚡ 一键测速（v3 抢跑）</button>
+      <button class="hx-btn" onclick="call('start','',loadStatus,this)">▶ 开启</button>
+      <button class="hx-btn" onclick="call('stop','',loadStatus,this)">■ 关闭</button>
+      <button class="hx-btn" onclick="call('selfcheck','',function(j){log(j.msg||'完成')},this)">✓ 自检跳转</button>
+      <button class="hx-btn" onclick="call('deploy','',function(j){log(j.msg||'完成');loadStatus()},this)">⬆ 部署</button>
+      <button class="hx-btn danger" onclick="call('undeploy','',function(j){log(j.msg||'完成');loadStatus()},this)">卸载还原</button>
+    </div>
+    <div class="hx-log" id="hx-log">就绪。测速由软路由执行（宽带出口，最准），手机 App 可远程触发同一套接口。</div>
+    <div class="hx-mini" id="hx-meta" style="margin-top:8px"></div>
+  </div>
+
+  <div class="hx-card">
+    <h2>测速排行榜</h2>
+    <div class="hx-toolbar">
+      <span class="hx-mini">10MB 分片下载量越大越快 · 点击“选用”下发生效</span>
+      <select id="hx-isp" class="hx-select" onchange="render()"><option value="">全部运营商</option></select>
+    </div>
+    <table class="hx-tbl">
+      <thead><tr><th>#</th><th>IP</th><th>地区</th><th>运营商</th><th>延迟</th><th>下载速度</th><th>操作</th></tr></thead>
+      <tbody id="hx-body"><tr><td colspan="7" class="hx-empty">点上方“一键测速”开始</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="hx-card hx-steps">
+    <b>使用步骤</b>　① 点“部署”并按提示用 :8080 重新打开管理页 → ② 点“一键测速” →
+    ③ 按运营商筛选、点最快那行的“选用” → ④ Xbox 网络设置里把 DNS 设为路由器 IP，开始下载；下完改回自动。
+  </div>
+</div>
+
+<%+footer%>

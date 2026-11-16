@@ -1,0 +1,172 @@
+#!/bin/sh
+# ============================================================
+# Helixbox 测速引擎 —— 复刻 PC 版 v3 的"两阶段并发抢跑"
+# 跑在软路由上（路由器就是宽带出口，测的就是游戏机下载走的那条路）
+#
+# v3 原理（来自 SpeedTestService.cs）：
+#   阶段1：所有 IP 并发 ping 1 秒，收满 10 个通的就掐断其余（最多 3 秒）
+#   阶段2：这 10 个 IP 同时下载"同一个 10MB 随机分片"，谁先下完谁赢，
+#          赢的瞬间取消其余（最多 10 秒）
+#   绑定 IP 但保留域名 Host（ConnectCallback / curl --resolve）
+#
+# 本脚本用 OpenWrt 自带工具实现：curl + ping + 后台并发 + 竞争文件
+# 输出：一行 JSON 给 LuCI API / 手机 App
+# ============================================================
+
+IPLIST=/usr/share/helixbox/iplist.txt
+STATE=/var/lib/helixbox/speedtest
+mkdir -p "$STATE"
+
+# 三个测速 URL（与 v3 一致），随机挑一个；都是 http，测速服务器皆支持 Range
+TEST_URLS="
+http://xvcf1.xboxlive.com/Z/routing/extraextralarge.txt
+http://gst.prod.dl.playstation.net/networktest/get_192m
+http://ctest-dl-lp1.cdn.nintendo.net/30m
+"
+CHUNK_BYTES=10485760   # 10MB 分片，与 v3 一致
+PING_TIMEOUT=1         # 单 IP ping 超时（秒）
+PING_PHASE_CAP=3       # ping 阶段总上限（秒）
+DL_TIMEOUT=10          # 下载阶段总上限（秒）
+MAX_CANDIDATES=10      # 进入下载阶段的候选数，与 v3 的"前10"一致
+
+# ---------- 工具 ----------
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+rand_pick_url() {
+	echo "$TEST_URLS" | sed '/^$/d' | awk 'BEGIN{srand()} {a[NR]=$0} END{print a[int(rand()*NR)+1]}'
+}
+rand_range() {
+	# 30MB 文件里随机取连续 10MB 的起点，范围 0~20MB
+	local max=$((30*1024*1024 - CHUNK_BYTES))
+	local from=$(awk -v m="$max" 'BEGIN{srand(); printf "%d", rand()*m}')
+	local to=$((from + CHUNK_BYTES - 1))
+	echo "$from $to"
+}
+
+# 从 IP 库抽取候选 IP（格式：IP (地区 运营商) ...，单行）
+extract_ips() {
+	grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' "$IPLIST" 2>/dev/null | awk '!seen[$0]++' | head -120
+}
+
+# 查某 IP 的地区+运营商，返回 "地区|运营商"
+lookup_info() {
+	local ip="$1"
+	grep -F "$ip" "$IPLIST" 2>/dev/null | head -1 | sed -n "s/.*$ip (\([^)]*\)).*/\1/p" | awk '{loc=$1; $1=""; isp=$0; sub(/^ +/,"",isp); gsub(/ +/," ",isp); print loc"|"isp}'
+}
+
+# ---------- 阶段1：并发 ping，先到先得 ----------
+phase_ping() {
+	local ips="$1"
+	local f="$STATE/ping.done" pids="$STATE/ping.pids" n=0
+	: > "$f"; : > "$pids"
+
+	for ip in $ips; do
+		(
+			local t
+			t=$(ping -c 1 -W "$PING_TIMEOUT" "$ip" 2>/dev/null | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)
+			[ -n "$t" ] && echo "$t $ip" >> "$f"
+		) &
+		echo $! >> "$pids"
+		n=$((n+1))
+	done
+
+	# 最多等 PING_PHASE_CAP 秒，或收满 MAX_CANDIDATES 个就提前收工
+	local i=0
+	while [ "$i" -lt "$((PING_PHASE_CAP*10))" ]; do
+		local cnt
+		cnt=$(wc -l < "$f")
+		[ "$cnt" -ge "$MAX_CANDIDATES" ] && break
+		sleep 0.1
+		i=$((i+1))
+	done
+	# 掐断还没返回的 ping
+	while read -r pid; do kill "$pid" 2>/dev/null; done < "$pids"
+	wait 2>/dev/null
+
+	# 按延迟升序取前 N 个 IP（ping 值小的在前）
+	sort -n "$f" | head -"$MAX_CANDIDATES" | awk '{print $2}'
+}
+
+# ---------- 阶段2：并发下载同一分片，谁先下完谁赢 ----------
+phase_download() {
+	local candidates="$1" url="$2" range="$3"
+	local from=$(echo "$range" | awk '{print $1}') to=$(echo "$range" | awk '{print $2}')
+	local d="$STATE/dl" f="$STATE/dl.done" pids="$STATE/dl.pids" win="$STATE/winner"
+	rm -rf "$d"; mkdir -p "$d"; : > "$f"; : > "$pids"; rm -f "$win"
+
+	for ip in $candidates; do
+		(
+			local out="$d/$ip" start end ms bytes
+			start=$(date +%s%N 2>/dev/null)
+			[ -z "$start" ] && start=$(date +%s)000000000
+			# --resolve：TCP 连到指定 IP，但 Host 头仍是域名（等价 v3 ConnectCallback）
+			curl -s --max-time "$DL_TIMEOUT" \
+				--resolve "$(echo "$url" | awk -F/ '{print $3}'):80:$ip" \
+				-r "${from}-${to}" -o "$out" "$url" 2>/dev/null
+			end=$(date +%s%N 2>/dev/null)
+			[ -z "$end" ] && end=$(date +%s)000000000
+			ms=$(( (end - start) / 1000000 ))
+			[ "$ms" -le 0 ] && ms=1
+			bytes=$(wc -c < "$out" 2>/dev/null); [ -z "$bytes" ] && bytes=0
+			echo "$ip $bytes $ms" >> "$f"
+			# 收到足量数据即视为完成，抢先占住 winner 文件（原子竞争）
+			if [ "$bytes" -ge 1048576 ] && [ ! -e "$win" ]; then
+				echo "$ip $bytes $ms" > "$win"
+			fi
+		) &
+		echo $! >> "$pids"
+	done
+
+	# 等第一个完成，或到 DL_TIMEOUT 上限
+	local i=0
+	while [ "$i" -lt "$((DL_TIMEOUT*10))" ]; do
+		[ -e "$win" ] && break
+		sleep 0.1
+		i=$((i+1))
+	done
+	while read -r pid; do kill "$pid" 2>/dev/null; done < "$pids"
+	wait 2>/dev/null
+
+	# 输出 winner 行
+	cat "$win" 2>/dev/null || echo ""
+	# 顺便把全部结果留档给 UI 展示
+	cp "$f" "$STATE/last_results.txt" 2>/dev/null
+}
+
+# ---------- 组装 JSON ----------
+main() {
+	local ips url range winner_ip result_json=""
+	ips=$(extract_ips)
+	if [ -z "$ips" ]; then
+		echo '{"ok":false,"msg":"IP 库为空"}'; return 1
+	fi
+	url=$(rand_pick_url)
+	range=$(rand_range)
+
+	local candidates
+	candidates=$(phase_ping "$ips")
+	if [ -z "$candidates" ]; then
+		echo '{"ok":false,"msg":"没有 IP 通过 ping"}'; return 1
+	fi
+
+	# 用第一个 ping 通的先跑，取回 winner 信息
+	local winline
+	winline=$(phase_download "$candidates" "$url" "$range")
+	winner_ip=$(echo "$winline" | awk '{print $1}')
+
+	# 收集每个 IP 的结果 -> JSON 数组
+	local first=1 item info loc isp bytes ms
+	while read -r ip b t; do
+		[ -z "$ip" ] && continue
+		info=$(lookup_info "$ip"); loc=$(echo "$info" | cut -d'|' -f1); isp=$(echo "$info" | cut -d'|' -f2)
+		[ -z "$loc" ] && loc="未知"; [ -z "$isp" ] && isp="未知"
+		bytes=$b; ms=$t
+		[ "$first" -eq 0 ] && result_json="$result_json,"
+		result_json="$result_json{\"ip\":\"$(json_escape "$ip")\",\"loc\":\"$(json_escape "$loc")\",\"isp\":\"$(json_escape "$isp")\",\"ms\":$ms,\"bytes\":$bytes,\"win\":$([ "$ip" = "$winner_ip" ] && echo true || echo false)}"
+		first=0
+	done < "$STATE/last_results.txt"
+
+	[ -z "$winner_ip" ] && winner_ip=$(echo "$candidates" | head -1)
+	echo "{\"ok\":true,\"winner\":\"$(json_escape "$winner_ip")\",\"url\":\"$url\",\"range\":\"$range\",\"results\":[$result_json]}"
+}
+
+main "$@"

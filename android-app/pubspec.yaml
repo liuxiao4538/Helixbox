@@ -1,0 +1,24 @@
+name: xboxdownload_controller
+description: "XboxDownload 加速器的 Android 配套控制与配置工具（测速选 IP / 生成配置 / 远程控制路由器插件）"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.2              # 测速 / 请求路由器 API / 拉官方 IP 库
+  shared_preferences: ^2.3.2 # 本地保存选中的 IP、路由器地址
+  connectivity_plus: ^6.1.0  # 判断当前网络
+  url_launcher: ^6.3.0       # 打开开源项目主页
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

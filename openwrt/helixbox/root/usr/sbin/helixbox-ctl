@@ -1,0 +1,197 @@
+#!/bin/sh
+# ============================================================
+# Helixbox 一键加速控制脚本（跑在 OpenWrt 软路由上）
+# 用法：helixbox-ctl {deploy|undeploy|start|stop|status|selfcheck|speedtest|apply_ip|set_auto}
+# 原理：把 xboxlive.com 等域名劫持到路由器，lighttpd 302 跳转到 .cn 国内 CDN
+# 所有改动先备份，卸载时原样还原
+# ============================================================
+
+CONF=/etc/config/helixbox
+BACKUP_DIR=/etc/helixbox.backup
+LIGHTTPD_CONF=/etc/lighttpd/lighttpd.conf
+UHTTPD_CONF=/etc/config/uhttpd
+HOSTS=/etc/hosts
+FIREWALL_CONF=/etc/firewall.user
+SPEEDTEST=/usr/sbin/helixbox-speedtest
+
+REDIRECT_DOMAINS="xvcf1.xboxlive.com xvcf2.xboxlive.com assets1.xboxlive.com assets2.xboxlive.com d1.xboxlive.com d2.xboxlive.com dlassets.xboxlive.com dlassets2.xboxlive.com 5.xb.delivery.microsoft.com assets1.xboxlive.com.edgesuite.net cl-glcb907925.gcdn.co fg.microsoft.map.fastly.net"
+
+mkdir -p "$BACKUP_DIR"
+
+# ---------- 工具 ----------
+uciget() { uci -q get "$1" 2>/dev/null; }
+log() { logger -t helixbox "$*" 2>/dev/null; echo "[helixbox] $*"; }
+router_ip() { ip -4 addr show br-lan 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1; }
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
+backup_once() { local f="$1"; [ -f "$f" ] || return 0; [ -f "$BACKUP_DIR/$(basename "$f")" ] || cp "$f" "$BACKUP_DIR/$(basename "$f")"; }
+restore_file() { local f="$1"; [ -f "$BACKUP_DIR/$(basename "$f")" ] && cp "$BACKUP_DIR/$(basename "$f")" "$f"; }
+group_ip() { uciget "helixbox.$1.ip"; }
+
+# ---------- 生成 lighttpd 302 配置 ----------
+write_lighttpd_conf() {
+	local port
+	port=$(uciget helixbox.main.uhttpd_port); [ -z "$port" ] && port=8080
+	mkdir -p /etc/lighttpd
+	cat > "$LIGHTTPD_CONF" <<EOF
+# 由 Helixbox 插件自动生成，请勿手改
+server.modules = ( "mod_redirect", "mod_proxy" )
+server.port = 80
+server.bind = "0.0.0.0"
+
+# 主下载域名 + SRV 域名 -> assets1 国内 CDN
+\$HTTP["host"] =~ "^(assets1|assets2|d1|d2|xvcf1|xvcf2)\\.xboxlive\\.com$|^5\\.xb\\.delivery\\.microsoft\\.com$|^assets1\\.xboxlive\\.com\\.edgesuite\\.net$|^cl-glcb907925\\.gcdn\\.co$|^fg\\.microsoft\\.map\\.fastly\\.net$" {
+    url.redirect = ( "(.*)" => "http://assets1.xboxlive.cn\$1" )
+}
+# 老游戏 dlassets -> dlassets 国内 CDN
+\$HTTP["host"] =~ "^(dlassets|dlassets2)\\.xboxlive\\.com$" {
+    url.redirect = ( "(.*)" => "http://dlassets.xboxlive.cn\$1" )
+}
+# 兜底转发到本机管理页
+proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => ${port} ) ) )
+EOF
+}
+
+# ---------- 域名劫持：国外域名指向路由器，国内域名指向测速选出的 IP ----------
+write_hosts() {
+	local rip="$1"
+	sed -i '/# helixbox-auto/d' "$HOSTS" 2>/dev/null
+	{
+		echo ""
+		echo "# helixbox-auto begin"
+		for d in $REDIRECT_DOMAINS; do echo "$rip $d # helixbox-auto"; done
+		local p l s
+		p=$(group_ip primary); l=$(group_ip legacy); s=$(group_ip storeapp)
+		for d in assets1.xboxlive.cn assets2.xboxlive.cn d1.xboxlive.cn d2.xboxlive.cn; do
+			[ -n "$p" ] && echo "$p $d # helixbox-auto"
+		done
+		for d in dlassets.xboxlive.cn dlassets2.xboxlive.cn; do
+			[ -n "$l" ] && echo "$l $d # helixbox-auto"
+		done
+		for d in dl.delivery.mp.microsoft.com tlu.dl.delivery.mp.microsoft.com; do
+			[ -n "$s" ] && echo "$s $d # helixbox-auto"
+		done
+		echo "# helixbox-auto end"
+	} >> "$HOSTS"
+	/etc/init.d/dnsmasq restart >/dev/null 2>&1
+}
+
+write_firewall() {
+	[ "$(uciget helixbox.main.ipv6_block)" = "1" ] || return 0
+	backup_once "$FIREWALL_CONF"; touch "$FIREWALL_CONF"
+	sed -i '/# helixbox-ipv6/d' "$FIREWALL_CONF"
+	cat >> "$FIREWALL_CONF" <<'EOF'
+# helixbox-ipv6 begin
+ip6tables -I INPUT -p udp --dport 547 -j DROP # helixbox-ipv6
+ip6tables -I INPUT -p icmpv6 -j DROP # helixbox-ipv6
+# helixbox-ipv6 end
+EOF
+	/etc/init.d/firewall restart >/dev/null 2>&1
+}
+
+# ---------- 部署 / 卸载 ----------
+do_deploy() {
+	log "开始一键部署..."
+	backup_once "$UHTTPD_CONF"; backup_once "$LIGHTTPD_CONF"; backup_once "$HOSTS"; backup_once "$FIREWALL_CONF"
+
+	if ! need_cmd lighttpd; then
+		log "安装 lighttpd ..."; opkg update >/dev/null 2>&1
+		opkg install lighttpd lighttpd-mod-redirect lighttpd-mod-proxy >/dev/null 2>&1 || {
+			log "ERROR: lighttpd 安装失败"; echo '{"ok":false,"msg":"lighttpd 安装失败，请检查软件源"}'; return 1; }
+	fi
+
+	local port
+	port=$(uciget helixbox.main.uhttpd_port); [ -z "$port" ] && port=8080
+	sed -i "s/list listen_http '0\.0\.0\.0:80'/list listen_http '0.0.0.0:${port}'/g; s/list listen_http '\[::\]:80'/list listen_http '[::]:${port}'/g" "$UHTTPD_CONF"
+	/etc/init.d/uhttpd restart >/dev/null 2>&1
+
+	write_lighttpd_conf; write_hosts "$(router_ip)"; write_firewall
+	chmod +x "$SPEEDTEST" 2>/dev/null
+	/etc/init.d/lighttpd enable >/dev/null 2>&1
+	/etc/init.d/lighttpd restart >/dev/null 2>&1
+
+	uci set helixbox.main.enabled='1'; uci commit helixbox
+	log "部署完成，管理页已移到 ${port} 端口"
+	echo '{"ok":true,"msg":"部署完成，请改用 :'"$port"' 打开管理页"}'
+}
+
+do_undeploy() {
+	log "开始卸载还原..."
+	/etc/init.d/lighttpd stop >/dev/null 2>&1; /etc/init.d/lighttpd disable >/dev/null 2>&1
+	restore_file "$UHTTPD_CONF"; restore_file "$LIGHTTPD_CONF"; restore_file "$HOSTS"; restore_file "$FIREWALL_CONF"
+	sed -i '/# helixbox-auto/d' "$HOSTS" 2>/dev/null
+	sed -i '/# helixbox-ipv6/d' "$FIREWALL_CONF" 2>/dev/null
+	/etc/init.d/uhttpd restart >/dev/null 2>&1; /etc/init.d/dnsmasq restart >/dev/null 2>&1; /etc/init.d/firewall restart >/dev/null 2>&1
+	uci set helixbox.main.enabled='0'; uci commit helixbox
+	log "已还原所有改动"; echo '{"ok":true,"msg":"已卸载还原"}'
+}
+
+do_start() {
+	/etc/init.d/lighttpd start >/dev/null 2>&1 || /etc/init.d/lighttpd restart >/dev/null 2>&1
+	uci set helixbox.main.enabled='1'; uci commit helixbox; echo '{"ok":true,"msg":"已开启"}'
+}
+do_stop() {
+	/etc/init.d/lighttpd stop >/dev/null 2>&1
+	uci set helixbox.main.enabled='0'; uci commit helixbox; echo '{"ok":true,"msg":"已关闭"}'
+}
+
+do_status() {
+	local enabled port running
+	enabled=$(uciget helixbox.main.enabled); [ -z "$enabled" ] && enabled=0
+	port=$(uciget helixbox.main.uhttpd_port); [ -z "$port" ] && port=8080
+	if pgrep lighttpd >/dev/null 2>&1; then running=1; else running=0; fi
+	echo "{\"ok\":true,\"enabled\":$enabled,\"running\":$running,\"uhttpd_port\":$port,\"router_ip\":\"$(router_ip)\",\"primary_ip\":\"$(group_ip primary)\",\"primary_isp\":\"$(uciget helixbox.primary.isp)\"}"
+}
+
+do_selfcheck() {
+	local loc
+	loc=$(curl -s -o /dev/null -D - -H 'Host: xvcf1.xboxlive.com' --max-time 8 'http://127.0.0.1/Z/routing/extraextralarge.txt' 2>/dev/null | grep -i '^location:' | tr -d '\r')
+	if echo "$loc" | grep -qi 'assets1\.xboxlive\.cn'; then
+		echo '{"ok":true,"passed":true,"msg":"跳转正常，已指向国内 CDN"}'
+	else
+		echo '{"ok":true,"passed":false,"msg":"未检测到跳转，请确认服务已开启且域名已劫持"}'
+	fi
+}
+
+# ---------- 测速：调用 v3 风格引擎（约 3+10 秒出结果）----------
+do_speedtest() {
+	[ -x "$SPEEDTEST" ] || { echo '{"ok":false,"msg":"测速引擎缺失"}'; return 1; }
+	local out
+	out=$("$SPEEDTEST" 2>/dev/null)
+	[ -z "$out" ] && { echo '{"ok":false,"msg":"测速无返回"}'; return 1; }
+	echo "$out"
+}
+
+# ---------- 下发选中 IP 到指定分组：apply_ip <group> <ip> [isp] ----------
+do_apply_ip() {
+	local group="$1" ip="$2" isp="$3"
+	case "$group" in primary|legacy|storeapp) ;; *) echo '{"ok":false,"msg":"分组无效"}'; return 1;; esac
+	# 简单校验 IP 格式
+	echo "$ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || { echo '{"ok":false,"msg":"IP 格式不对"}'; return 1; }
+	uci set "helixbox.$group.ip=$ip"
+	[ -n "$isp" ] && uci set "helixbox.$group.isp=$isp"
+	uci set helixbox.main.last_update="$(date '+%F %T')"
+	uci commit helixbox
+	write_hosts "$(router_ip)"
+	log "已应用 $group = $ip ($isp)"
+	echo "{\"ok\":true,\"msg\":\"已应用 $group = $ip\",\"ip\":\"$ip\"}"
+}
+
+# ---------- 自动测速开关：set_auto <0|1> ----------
+do_set_auto() {
+	local v="$1"; [ "$v" = "1" ] || v=0
+	uci set helixbox.main.auto_test="$v"; uci commit helixbox
+	echo "{\"ok\":true,\"auto_test\":$v,\"msg\":\"自动测速已$( [ "$v" = 1 ] && echo 开启 || echo 关闭 )\"}"
+}
+
+case "$1" in
+	deploy) do_deploy ;;
+	undeploy) do_undeploy ;;
+	start) do_start ;;
+	stop) do_stop ;;
+	status) do_status ;;
+	selfcheck) do_selfcheck ;;
+	speedtest) do_speedtest ;;
+	apply_ip) shift; do_apply_ip "$@" ;;
+	set_auto) shift; do_set_auto "$@" ;;
+	*) echo '{"ok":false,"msg":"用法: helixbox-ctl {deploy|undeploy|start|stop|status|selfcheck|speedtest|apply_ip|set_auto}"}'; exit 1 ;;
+esac
